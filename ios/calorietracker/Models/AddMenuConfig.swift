@@ -81,7 +81,9 @@ struct AddMenuConfig: Codable, Equatable, Sendable {
                 name: String(localized: "Photo & Scan", comment: "Default add menu group"),
                 methods: [.barcode, .photos, .camera]
             ),
-        ]
+        ],
+        // Shown directly under +, after the groups.
+        flatMethods: [.dormMenu]
     )
 
     var usesFlatLayout: Bool { groups.isEmpty }

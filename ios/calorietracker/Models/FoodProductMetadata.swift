@@ -25,6 +25,8 @@ struct FoodProductMetadata: Codable, Equatable, Sendable {
         switch dataSource {
         case FoodDataCentralService.dataSourceID?:
             String(localized: "USDA FoodData Central", comment: "Product Information source for foods found in the USDA FoodData Central database.")
+        case UofTDiningService.dataSourceID?:
+            String(localized: "U of T Food Services", comment: "Product Information source for items from a University of Toronto dining hall menu.")
         default:
             nil
         }

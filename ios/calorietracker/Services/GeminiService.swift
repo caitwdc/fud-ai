@@ -383,6 +383,9 @@ struct GeminiService {
         if let description, !description.trimmingCharacters(in: .whitespaces).isEmpty {
             prompt += "\n\nAdditional context from the user about this meal: \(description)\nUse this context to improve accuracy of identification, portion size, and nutrition estimates."
         }
+        if let diningHallSection = DiningHallMode.promptSection() {
+            prompt += "\n\n" + diningHallSection
+        }
 
         return try await runWithHostedQuota(.photoFood, skip: skipHostedMetering) {
             if let onDevice = try await analyzeFoodWithAppleIntelligenceIfSelected(
@@ -440,6 +443,9 @@ struct GeminiService {
         }
         if let portionScaleSection {
             prompt += "\n\n" + portionScaleSection
+        }
+        if let diningHallSection = DiningHallMode.promptSection() {
+            prompt += "\n\n" + diningHallSection
         }
         return prompt
     }

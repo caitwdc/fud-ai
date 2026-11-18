@@ -9,6 +9,7 @@ struct AddMenuConfigTests {
         #expect(config.groups[0].methods == [.copyFromDay, .favorites, .frequent, .recent])
         #expect(config.groups[1].methods == [.manual, .siriPhrases, .voice, .text])
         #expect(config.groups[2].methods == [.barcode, .photos, .camera])
+        #expect(config.flatMethods == [.dormMenu])
     }
 
     @Test func storageRoundTripsAndDedupesMethods() {

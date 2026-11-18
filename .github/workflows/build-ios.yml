@@ -1,0 +1,125 @@
+name: Build iOS (unsigned IPA)
+
+# Builds an unsigned Release FudAI.ipa on every push to main or master and keeps it
+# as a workflow artifact. Nothing here signs, uploads or touches App Store Connect.
+#
+# An unsigned IPA will not install on an iPhone as-is: re-sign it with your own Apple ID
+# (for example with a sideloading tool such as Sideloadly or AltStore), or build to your
+# phone from Xcode.
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # The app needs Xcode 27 (it uses iOS 27 FoundationModels image APIs). GitHub's
+    # `macos-latest` currently runs macOS 26 with Xcode 26.x, which can't build it;
+    # Xcode 27 is only on the `xcode-27` image (Apple Silicon).
+    runs-on: xcode-27
+    timeout-minutes: 60
+    env:
+      DERIVED_DATA: ${{ github.workspace }}/build/DerivedData
+      PACKAGES: ${{ github.workspace }}/.ios-packages
+    steps:
+      - name: Check out the app sources
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          filter: blob:none
+          # shared/workout-vectors is a 1.2 GB image corpus; Release builds only read its manifest.
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /ios/
+            /local-models/legal/
+            /scripts/ci/ensure_metal_toolchain.sh
+            /shared/workout-vectors/exercise-visual-manifest.json
+
+      - name: Show Xcode version
+        run: |
+          xcodebuild -version
+          major="$(xcodebuild -version | awk '/^Xcode / { split($2, v, "."); print v[1] }')"
+          if [ "${major:-0}" -lt 27 ]; then
+            echo "::error::Xcode 27 or newer is required."
+            exit 1
+          fi
+
+      - name: Ensure the Metal shader compiler is available
+        run: bash scripts/ci/ensure_metal_toolchain.sh
+
+      - name: Cache Swift packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ios-packages
+          key: build-ios-spm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ios/**/Package.resolved', 'ios/Packages/**/Package.swift') }}
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project ios/calorietracker.xcodeproj \
+            -scheme calorietracker \
+            -clonedSourcePackagesDirPath "$PACKAGES"
+
+      - name: Build Release for iPhone without code signing
+        run: |
+          set -o pipefail
+          mkdir -p build
+          xcodebuild build \
+            -project ios/calorietracker.xcodeproj \
+            -scheme calorietracker \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$DERIVED_DATA" \
+            -clonedSourcePackagesDirPath "$PACKAGES" \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            2>&1 | tee build/xcodebuild.log
+
+      - name: Package Payload/ into FudAI.ipa
+        run: |
+          set -euo pipefail
+          products="$DERIVED_DATA/Build/Products/Release-iphoneos"
+          # The main app is the .app at the top of the products folder that embeds PlugIns.
+          app=""
+          for candidate in "$products"/*.app; do
+            if [ -d "$candidate/PlugIns" ] || [ -z "$app" ]; then app="$candidate"; fi
+          done
+          if [ -z "$app" ] || [ ! -d "$app" ]; then
+            echo "::error::No .app found in $products"
+            ls -la "$products" || true
+            exit 1
+          fi
+          echo "Packaging $(basename "$app")"
+          rm -rf Payload FudAI.ipa
+          mkdir Payload
+          cp -R "$app" Payload/
+          # ditto keeps symlinks and permissions intact inside the IPA.
+          ditto -c -k --sequesterRsrc --keepParent Payload FudAI.ipa
+          ls -lh FudAI.ipa
+
+      - name: Upload FudAI.ipa
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: FudAI-ipa
+          path: FudAI.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Keep the build log if the build failed
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: xcodebuild-log
+          path: build/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7

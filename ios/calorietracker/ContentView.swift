@@ -1085,6 +1085,7 @@ struct HomeView: View {
     @State private var isImportingPhotos = false
     @State private var showMultiPhotoCaptureSheet = false
     @State private var contextDescription: String = ""
+    @State private var showDormMenu = false
     @State private var showContextSheet = false
     @State private var voiceAssistant = VoiceAssistantController.shared
     @State private var assistantNavigator = VoiceAssistantNavigator.shared
@@ -2200,6 +2201,16 @@ private var dailyStepsTaskKey: String {
             .sheet(isPresented: $showCopyFromDaySheet) {
                 CopyFromDaySheet(targetDate: selectedDate)
             }
+            .sheet(isPresented: $showDormMenu) {
+                DormMenuView(logDate: logDateForSelectedDay) { entry in
+                    guard foodStore.addEntry(entry) else {
+                        showDormMenu = false
+                        showFoodLoggingBlocked = true
+                        return false
+                    }
+                    return true
+                }
+            }
             .sheet(isPresented: $showFastingStart) {
                 FastingStartSheet(defaultGoalMinutes: fastingDefaultGoalMinutes) { goalMinutes in
                     startFast(goalMinutes: goalMinutes)
@@ -2381,6 +2392,7 @@ private var dailyStepsTaskKey: String {
         let hadOpenDestination = showCamera || showBarcodeScanner || showPhotoPicker
             || showVoicePopover || showTextPopover || showManualPopover
             || savedMealsMode != nil || showContextSheet || showMultiPhotoCaptureSheet
+            || showCopyFromDaySheet || showDormMenu
             || showFastingStart || editingFastingSession != nil
 
         showCamera = false
@@ -2393,6 +2405,7 @@ private var dailyStepsTaskKey: String {
         showContextSheet = false
         showMultiPhotoCaptureSheet = false
         showCopyFromDaySheet = false
+        showDormMenu = false
         showNutritionDetail = false
         showCustomWaterLog = false
         showError = false
@@ -2476,7 +2489,7 @@ private var dailyStepsTaskKey: String {
         let hadOpenDestination = showCamera || showBarcodeScanner || showPhotoPicker
             || showVoicePopover || showTextPopover || showManualPopover
             || savedMealsMode != nil || showContextSheet || showMultiPhotoCaptureSheet
-            || showCopyFromDaySheet || showFastingStart || editingFastingSession != nil
+            || showCopyFromDaySheet || showDormMenu || showFastingStart || editingFastingSession != nil
 
         showCamera = false
         showBarcodeScanner = false
@@ -2488,6 +2501,7 @@ private var dailyStepsTaskKey: String {
         showContextSheet = false
         showMultiPhotoCaptureSheet = false
         showCopyFromDaySheet = false
+        showDormMenu = false
         showNutritionDetail = false
         showCustomWaterLog = false
         showError = false
@@ -2900,6 +2914,8 @@ extension HomeView {
             savedMealsMode = .recent
         case .copyFromDay:
             showCopyFromDaySheet = true
+        case .dormMenu:
+            showDormMenu = true
         }
     }
 
@@ -3516,6 +3532,8 @@ struct MultiPhotoCaptureSheet: View {
                         .padding(14)
                         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
                     }
+
+                    DiningHallModeCard()
                 }
                 .padding()
             }
